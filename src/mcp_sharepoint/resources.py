@@ -1,7 +1,15 @@
 import base64
 from io import BytesIO
 from typing import Dict, Any, List, Optional
+from datetime import datetime
 from .common import logger, SHP_DOC_LIBRARY, sp_context
+
+# Helper function to safely convert to ISO format
+def _to_iso_optional(dt_obj: Optional[datetime]) -> Optional[str]:
+    """Converts a datetime object to ISO format string, or returns None if the object is None."""
+    if dt_obj is not None:
+        return dt_obj.isoformat()
+    return None
 
 def _get_sp_path(sub_path: Optional[str] = None) -> str:
     """Create a properly formatted SharePoint path"""
@@ -23,8 +31,8 @@ def list_folders(parent_folder: Optional[str] = None) -> List[Dict[str, Any]]:
     return [{
         "name": f.name,
         "url": f.properties.get("ServerRelativeUrl"),
-        "created": f.properties.get("TimeCreated").isoformat() if f.properties.get("TimeCreated") else None,
-        "modified": f.properties.get("TimeLastModified").isoformat() if f.properties.get("TimeLastModified") else None
+        "created": _to_iso_optional(f.properties.get("TimeCreated")),
+        "modified": _to_iso_optional(f.properties.get("TimeLastModified"))
     } for f in folders]
 
 def list_documents(folder_name: str) -> List[Dict[str, Any]]:
@@ -43,8 +51,8 @@ def list_documents(folder_name: str) -> List[Dict[str, Any]]:
         "name": f.name,
         "url": f.properties.get("ServerRelativeUrl"),
         "size": f.properties.get("Length"),
-        "created": f.properties.get("TimeCreated").isoformat() if f.properties.get("TimeCreated") else None,
-        "modified": f.properties.get("TimeLastModified").isoformat() if f.properties.get("TimeLastModified") else None
+        "created": _to_iso_optional(f.properties.get("TimeCreated")),
+        "modified": _to_iso_optional(f.properties.get("TimeLastModified"))
     } for f in files]
 
 def get_document_content(folder_name: str, file_name: str) -> Dict[str, Any]:

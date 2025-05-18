@@ -22,6 +22,16 @@ SHP_SITE_URL = os.getenv('SHP_SITE_URL')
 SHP_DOC_LIBRARY = os.getenv('SHP_DOC_LIBRARY', 'Shared Documents/mcp_server')
 SHP_TENANT_ID = os.getenv('SHP_TENANT_ID')
 
+if not SHP_SITE_URL:
+    logger.error("SHP_SITE_URL environment variable not set.")
+    raise ValueError("SHP_SITE_URL environment variable not set.")
+if not SHP_ID_APP:
+    logger.error("SHP_ID_APP environment variable not set.")
+    raise ValueError("SHP_ID_APP environment variable not set.")
+if not SHP_ID_APP_SECRET:
+    logger.error("SHP_ID_APP_SECRET environment variable not set.")
+    raise ValueError("SHP_ID_APP_SECRET environment variable not set.")
+
 # Initialize MCP server
 mcp = FastMCP(
     name="mcp_sharepoint",

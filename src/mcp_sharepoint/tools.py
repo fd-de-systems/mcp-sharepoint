@@ -5,7 +5,7 @@ from .common import logger, mcp, SHP_DOC_LIBRARY, sp_context
 from .resources import list_folders, list_documents, get_document_content
 
 # Helper functions to reduce code duplication
-def _get_path(folder: str = "", file: str = None) -> str:
+def _get_path(folder: str = "", file: Optional[str] = None) -> str:
     """Construct SharePoint path from components"""
     path = f"{SHP_DOC_LIBRARY}/{folder}".rstrip('/')
     return f"{path}/{file}" if file else path
