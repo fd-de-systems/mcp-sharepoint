@@ -1,4 +1,4 @@
-import base64
+import base64, os
 from functools import wraps
 from typing import Optional, Dict, Any
 from .common import logger, mcp, SHP_DOC_LIBRARY, sp_context
@@ -76,6 +76,28 @@ async def upload_document(folder_name: str, file_name: str, content: str, is_bas
     sp_context.execute_query()
     
     return _file_success_response(uploaded_file, f"File {file_name} uploaded successfully")
+
+@mcp.tool(name="Upload_Document_From_Path", description="Upload a file directly from a file path to SharePoint")
+@_handle_sp_operation
+async def upload_document_from_path(folder_name: str, file_path: str, new_file_name: Optional[str] = None):
+    """Upload a file directly from a path without needing to convert to base64 first"""
+    logger.info(f"Uploading document from path {file_path} to folder {folder_name}")
+    
+    try:
+        with open(file_path, "rb") as file:
+            file_content = file.read()
+        
+        if not new_file_name:
+            new_file_name = os.path.basename(file_path)
+            
+        folder = sp_context.web.get_folder_by_server_relative_url(_get_path(folder_name))
+        uploaded_file = folder.upload_file(new_file_name, file_content)
+        sp_context.execute_query()
+        
+        return _file_success_response(uploaded_file, f"File {new_file_name} uploaded successfully")
+    except Exception as e:
+        logger.error(f"Error uploading file from path: {str(e)}")
+        raise
 
 @mcp.tool(name="Update_Document", description="Update an existing document in a SharePoint directory")
 @_handle_sp_operation
