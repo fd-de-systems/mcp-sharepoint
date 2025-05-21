@@ -17,6 +17,7 @@ The server implements the following tools:
 - `Get_Document_Content`: Retrieves the content of a document (as text or base64-encoded binary)
 - `Create_Folder`: Creates a new folder in the specified directory or root
 - `Upload_Document`: Uploads a new document to a specified folder
+- `Upload_Document`: Uploads large documents from path.
 - `Update_Document`: Updates the content of an existing document
 - `Delete_Document`: Removes a document from a specified folder
 - `Delete_Folder`: Deletes an empty folder from SharePoint
