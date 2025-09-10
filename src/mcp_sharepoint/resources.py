@@ -8,6 +8,8 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from .common import logger, SHP_DOC_LIBRARY, sp_context
 
+logger = logging.getLogger(__name__)
+
 # Helper function to safely convert to ISO format
 def _to_iso_optional(dt_obj: Optional[datetime]) -> Optional[str]:
     """Converts a datetime object to ISO format string, or returns None if the object is None."""
@@ -61,7 +63,6 @@ def list_documents(folder_name: str) -> List[Dict[str, Any]]:
 
 def extract_text_from_pdf(pdf_content):
     """Extract text from PDF using PyMuPDF with fallback methods."""
-    logger = logging.getLogger(__name__)
     
     # Process the PDF
     try:
@@ -80,152 +81,102 @@ def extract_text_from_pdf(pdf_content):
         raise
 
 def get_folder_tree(parent_folder: Optional[str] = None) -> Dict[str, Any]:
-    """Recursively lists all folders and files from a parent folder."""
-    # Determine the current path and log location
+    """Recursively list all folders and files from a parent folder."""
     path = _get_sp_path(parent_folder)
-    log_location = parent_folder or "root directory"
-    logger.info(f"Building tree for {log_location} at path: {path}")
+    logger.info(f"Building tree for {parent_folder or 'root'} at path: {path}")
 
-    # Get current folder object to have a starting point
-    try:
-        current_folder_obj = sp_context.web.get_folder_by_server_relative_url(path)
-        sp_context.load(current_folder_obj, ["Name", "ServerRelativeUrl", "TimeCreated", "TimeLastModified"])
-        sp_context.execute_query()
-    except Exception as e:
-        logger.error(f"Could not retrieve folder '{path}': {e}")
-        # Return an error structure if the folder is not found
-        return {
-            "name": os.path.basename(path),
-            "path": path,
-            "type": "folder",
-            "error": f"Could not access folder: {e}",
-            "children": []
-        }
+    folder = _load_sp_folder(path)
+    if not folder:
+        return {"name": os.path.basename(path), "path": path, "type": "folder", "error": "Could not access folder", "children": []}
 
-    # Initialize the tree structure for the current folder
-    tree = {
-        "name": current_folder_obj.name,
-        "path": current_folder_obj.properties.get("ServerRelativeUrl"),
+    children = _get_folder_children(parent_folder)
+
+    return {
+        "name": folder.name,
+        "path": folder.properties.get("ServerRelativeUrl"),
         "type": "folder",
-        "created": _to_iso_optional(current_folder_obj.properties.get("TimeCreated")),
-        "modified": _to_iso_optional(current_folder_obj.properties.get("TimeLastModified")),
-        "children": []
+        "created": _to_iso_optional(folder.properties.get("TimeCreated")),
+        "modified": _to_iso_optional(folder.properties.get("TimeLastModified")),
+        "children": children
     }
 
-    # Recursively get subfolders
+def _load_sp_folder(path: str):
+    """Load folder object from SharePoint."""
     try:
-        subfolders = list_folders(parent_folder)
-        for folder_data in subfolders:
-            # The path for recursion must be relative to the SHP_DOC_LIBRARY root.
-            # The folder_data["url"] is the full server-relative URL, so we need to strip the site prefix and the library path.
-            # Ensure web properties are loaded to get the title
-            if not sp_context.web.is_property_available('Title'):
-                sp_context.load(sp_context.web, ['Title'])
-                sp_context.execute_query()
+        folder = sp_context.web.get_folder_by_server_relative_url(path)
+        sp_context.load(folder, ["Name", "ServerRelativeUrl", "TimeCreated", "TimeLastModified"])
+        sp_context.execute_query()
+        return folder
+    except Exception as e:
+        logger.error(f"Failed to load folder '{path}': {e}")
+        return None
 
-            site_path_segment = sp_context.web.properties['Title']
-            full_shp_doc_library_path = f"/sites/{site_path_segment}/{SHP_DOC_LIBRARY}"
-            if folder_data["url"].startswith(full_shp_doc_library_path):
-                relative_path = folder_data["url"][len(full_shp_doc_library_path):].lstrip('/')
-                tree["children"].append(get_folder_tree(relative_path))
+def _get_folder_children(parent_folder: Optional[str]):
+    """Return list of child folders and files."""
+    children = []
+    try:
+        site_title = sp_context.web.properties.get('Title') or _load_web_title()
+        lib_prefix = f"/sites/{site_title}/{SHP_DOC_LIBRARY}"
+
+        # Subfolders
+        for f in list_folders(parent_folder):
+            if f["url"].startswith(lib_prefix):
+                children.append(get_folder_tree(f["url"][len(lib_prefix):].lstrip('/')))
             else:
-                logger.warning(f"Could not determine relative path for folder: {folder_data['url']}")
-    except Exception as e:
-        logger.error(f"Could not list subfolders in '{path}': {e}")
+                logger.warning(f"Cannot determine relative path for {f['url']}")
 
-    # Get files in the current folder
-    try:
-        # list_documents expects a relative path from the document library root
-        files = list_documents(parent_folder)
-        for file_data in files:
-            tree["children"].append({
-                "name": file_data["name"],
-                "path": file_data["url"],
-                "type": "file",
-                "size": file_data.get("size"),
-                "created": file_data.get("created"),
-                "modified": file_data.get("modified"),
-            })
-    except Exception as e:
-        logger.error(f"Could not list files in '{path}': {e}")
+        # Files
+        children.extend({
+            "name": f["name"],
+            "path": f["url"],
+            "type": "file",
+            "size": f.get("size"),
+            "created": f.get("created"),
+            "modified": f.get("modified"),
+        } for f in list_documents(parent_folder))
 
-    return tree
+    except Exception as e:
+        logger.error(f"Error listing children for '{parent_folder}': {e}")
+    return children
+
+def _load_web_title() -> str:
+    if not sp_context.web.is_property_available('Title'):
+        sp_context.load(sp_context.web, ['Title'])
+        sp_context.execute_query()
+    return sp_context.web.properties['Title']
 
 def get_document_content(folder_name: str, file_name: str) -> dict:
-    """Get content of a specified document, supports PDFs with text."""
-
-    logger = logging.getLogger(__name__)
-    
+    """Retrieve document content; supports PDF text extraction."""
     file_path = _get_sp_path(f"{folder_name}/{file_name}")
     file = sp_context.web.get_file_by_server_relative_url(file_path)
     sp_context.load(file, ["Exists", "Length", "Name"])
     sp_context.execute_query()
     logger.info(f"File exists: {file.exists}, size: {file.length}")
-    
-    content_stream = io.BytesIO()
-    file.download(content_stream)
+
+    content = io.BytesIO()
+    file.download(content)
     sp_context.execute_query()
-    content_stream.seek(0)
-    content = content_stream.read()
+    content_bytes = content.getvalue()
 
-    is_pdf = file_name.lower().endswith('.pdf')
-    is_text_file = file_name.lower().endswith(('.txt', '.csv', '.json', '.xml', '.html', '.md', '.js', '.css', '.py'))
+    return _process_file_content(file_name, content_bytes)
 
-    if is_pdf:
+def _process_file_content(file_name: str, content: bytes) -> dict:
+    lower_name = file_name.lower()
+    if lower_name.endswith('.pdf'):
         try:
-            # Use our robust PDF text extraction function
-            text_content, page_count = extract_text_from_pdf(content)
-            
-            # Return text content with metadata
-            return {
-                "name": file_name,
-                "content_type": "text",
-                "content": text_content,
-                "original_type": "pdf",
-                "page_count": page_count,
-                "size": len(content)
-            }
-
-        except ImportError as e:
-            logger.warning(f"Missing dependencies for PDF processing: {e}. Returning binary content.")
-            return {
-                "name": file_name,
-                "content_type": "binary",
-                "content_base64": base64.b64encode(content).decode('ascii'),
-                "original_type": "pdf",
-                "error": f"PDF text extraction failed: {str(e)}",
-                "size": len(content)
-            }
+            text, pages = extract_text_from_pdf(content)
+            return {"name": file_name, "content_type": "text", "content": text, "original_type": "pdf", "page_count": pages, "size": len(content)}
         except Exception as e:
-            logger.error(f"Error processing PDF: {e}")
-            return {
-                "name": file_name,
-                "content_type": "binary",
-                "content_base64": base64.b64encode(content).decode('ascii'),
-                "original_type": "pdf",
-                "error": f"PDF processing error: {str(e)}",
-                "size": len(content)
-            }
+            logger.warning(f"PDF processing failed: {e}")
+            return _binary_file_response(file_name, content, "pdf")
 
-    elif is_text_file:
+    if lower_name.endswith(('.txt', '.csv', '.json', '.xml', '.html', '.md', '.js', '.css', '.py')):
         try:
-            return {
-                "name": file_name,
-                "content_type": "text",
-                "content": content.decode('utf-8'),
-                "size": len(content)
-            }
+            return {"name": file_name, "content_type": "text", "content": content.decode('utf-8'), "size": len(content)}
         except UnicodeDecodeError:
-            return {
-                "name": file_name,
-                "content_type": "binary",
-                "content_base64": base64.b64encode(content).decode('ascii'),
-                "size": len(content)
-            }
-    else:
-        return {
-            "name": file_name,
-            "content_type": "binary",
-            "content_base64": base64.b64encode(content).decode('ascii'),
-            "size": len(content)
-        }
+            return _binary_file_response(file_name, content)
+
+    return _binary_file_response(file_name, content)
+
+def _binary_file_response(file_name: str, content: bytes, original_type: Optional[str] = None) -> dict:
+    return {"name": file_name, "content_type": "binary", "content_base64": base64.b64encode(content).decode(), "original_type": original_type, "size": len(content)}
