@@ -1,7 +1,6 @@
 import base64
 import os
 import fitz
-import base64
 import io
 import logging
 from io import BytesIO
@@ -62,7 +61,6 @@ def list_documents(folder_name: str) -> List[Dict[str, Any]]:
 
 def extract_text_from_pdf(pdf_content):
     """Extract text from PDF using PyMuPDF with fallback methods."""
-    import logging
     logger = logging.getLogger(__name__)
     
     # Process the PDF
