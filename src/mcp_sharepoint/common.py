@@ -3,7 +3,6 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from office365.sharepoint.client_context import ClientContext
 from office365.runtime.auth.client_credential import ClientCredential
-from office365.runtime.auth.authentication_context import AuthenticationContext
 
 # Configure logging
 logging.basicConfig(
@@ -32,9 +31,6 @@ if not SHP_ID_APP:
 if not SHP_ID_APP_SECRET:
     logger.error("SHP_ID_APP_SECRET environment variable not set.")
     raise ValueError("SHP_ID_APP_SECRET environment variable not set.")
-if not SHP_TENANT_ID:
-    logger.error("SHP_TENANT_ID environment variable not set.")
-    raise ValueError("SHP_TENANT_ID environment variable not set.")
 
 # Initialize MCP server
 mcp = FastMCP(
@@ -44,7 +40,4 @@ mcp = FastMCP(
 
 # Initial SharePoint context
 credentials = ClientCredential(SHP_ID_APP, SHP_ID_APP_SECRET)
-auth_ctx = AuthenticationContext(
-    f"https://login.microsoftonline.com/{SHP_TENANT_ID}"
-)
-sp_context = ClientContext(SHP_SITE_URL, auth_ctx).with_credentials(credentials)
+sp_context = ClientContext(SHP_SITE_URL).with_credentials(credentials)
