@@ -19,9 +19,10 @@ The server implements the following tools:
 - `List_SharePoint_Folders`: Lists all folders in a specified directory or root
 - `List_SharePoint_Documents`: Fetches all documents within a specified folder
 - `Get_Document_Content`: Retrieves the content of a document (as text or base64-encoded binary)
+- `Get_SharePoint_Tree`: Gets a recursive tree view of a SharePoint folder structure
 - `Create_Folder`: Creates a new folder in the specified directory or root
 - `Upload_Document`: Uploads a new document to a specified folder
-- `Upload_Document`: Uploads large documents from path.
+- `Upload_Document_From_Path`: Uploads large documents from file path
 - `Update_Document`: Updates the content of an existing document
 - `Delete_Document`: Removes a document from a specified folder
 - `Delete_Folder`: Deletes an empty folder from SharePoint
@@ -118,7 +119,10 @@ On macOS: `~/Library/Application\ Support/Claude/claude_desktop_config.json`
       "SHP_ID_APP_SECRET": "your-app-secret",
       "SHP_SITE_URL": "https://your-tenant.sharepoint.com/sites/your-site",
       "SHP_DOC_LIBRARY": "Shared Documents/your-folder",
-      "SHP_TENANT_ID": "your-tenant-id"
+      "SHP_TENANT_ID": "your-tenant-id",
+      "SHP_MAX_DEPTH": "15",
+      "SHP_MAX_FOLDERS_PER_LEVEL": "100",
+      "SHP_LEVEL_DELAY": "0.5"
     }
   }
 }
