@@ -1,4 +1,4 @@
-import base64, os, fitz, io, logging
+import base64, os, fitz, io, logging, time
 from typing import Dict, Any, List, Optional
 from .common import logger, SHP_DOC_LIBRARY, sp_context
 
@@ -9,6 +9,7 @@ FILE_TYPES = {
     'text': ['.txt', '.csv', '.json', '.xml', '.html', '.md', '.js', '.css', '.py'],
     'pdf': ['.pdf']
 }
+TREE_CONFIG = {'max_depth': 15, 'max_folders_per_level': 100, 'level_delay': 0.5}
 
 def _get_sp_path(sub_path: Optional[str] = None) -> str:
     """Create a properly formatted SharePoint path"""
@@ -53,45 +54,74 @@ def extract_text_from_pdf(pdf_content):
         raise
 
 def get_folder_tree(parent_folder: Optional[str] = None) -> Dict[str, Any]:
-    """Recursively list all folders and files from a parent folder"""
-    path = _get_sp_path(parent_folder)
-    logger.info(f"Building tree for {parent_folder or 'root'} at path: {path}")
+    """Iteratively build folder tree level by level to avoid recursion limits"""
+    root_path, tree_nodes = _get_sp_path(parent_folder), {}
+    logger.info(f"Building iterative tree for {parent_folder or 'root'}")
     
     try:
-        folder = sp_context.web.get_folder_by_server_relative_url(path)
-        sp_context.load(folder, ["Name", "ServerRelativeUrl", "TimeCreated", "TimeLastModified"])
+        # Get root folder
+        root = sp_context.web.get_folder_by_server_relative_url(root_path)
+        sp_context.load(root, ["Name", "ServerRelativeUrl", "TimeCreated", "TimeLastModified"])
         sp_context.execute_query()
         
-        # Get site title for path processing
-        if not sp_context.web.is_property_available('Title'):
-            sp_context.load(sp_context.web, ['Title'])
-            sp_context.execute_query()
-        lib_prefix = f"/sites/{sp_context.web.properties['Title']}/{SHP_DOC_LIBRARY}"
+        # Process folders level by level
+        pending = [parent_folder or ""]
+        for level in range(TREE_CONFIG['max_depth']):
+            if not pending: break
+            logger.info(f"Level {level + 1}: {len(pending)} folders")
+            
+            # Process all folders in this level by batches
+            current_level_folders = pending.copy()
+            next_level_folders = []
+            pending = []  # Reset for next level
+            
+            # Process current level in batches to handle large numbers of folders
+            while current_level_folders:
+                batch = current_level_folders[:TREE_CONFIG['max_folders_per_level']]
+                current_level_folders = current_level_folders[TREE_CONFIG['max_folders_per_level']:]
+                
+                for folder_path in batch:
+                    try:
+                        subfolders = [f["name"] for f in list_folders(folder_path)]
+                        files = list_documents(folder_path)
+                        
+                        tree_nodes[folder_path] = [
+                            {"name": name, "type": "folder", "children": []} for name in subfolders
+                        ] + [{"name": f["name"], "path": f["url"], "type": "file", 
+                             **{k: v for k, v in f.items() if k not in ["name", "url"]}} for f in files]
+                        
+                        # Add subfolders to next level processing
+                        next_level_folders.extend([f"{folder_path}/{name}".strip('/') for name in subfolders])
+                    except: 
+                        logger.warning(f"Failed to process: {folder_path}")
+                
+                # Small delay between batches to avoid overwhelming SharePoint
+                if current_level_folders:  # Only delay if more batches remain
+                    time.sleep(0.1)
+            
+            # Set up for next level
+            pending = next_level_folders
+            
+            if level < TREE_CONFIG['max_depth'] - 1: time.sleep(TREE_CONFIG['level_delay'])
         
-        # Build children recursively
-        children = []
-        for f in list_folders(parent_folder):
-            if f["url"].startswith(lib_prefix):
-                children.append(get_folder_tree(f["url"][len(lib_prefix):].lstrip('/')))
-            else:
-                logger.warning(f"Cannot determine relative path for {f['url']}")
-        
-        children.extend({
-            "name": f["name"], "path": f["url"], "type": "file",
-            **{k: v for k, v in f.items() if k not in ["name", "url"]}
-        } for f in list_documents(parent_folder or ""))
+        # Build nested structure
+        def build_node(path: str) -> List[Dict]:
+            children = tree_nodes.get(path, [])
+            for child in children:
+                if child["type"] == "folder":
+                    child["children"] = build_node(f"{path}/{child['name']}".strip('/'))
+            return children
         
         return {
-            "name": folder.name,
-            "path": folder.properties.get("ServerRelativeUrl"),
-            "type": "folder",
-            "created": folder.properties.get("TimeCreated").isoformat() if folder.properties.get("TimeCreated") else None,
-            "modified": folder.properties.get("TimeLastModified").isoformat() if folder.properties.get("TimeLastModified") else None,
-            "children": children
+            "name": root.name, "path": root.properties.get("ServerRelativeUrl"), "type": "folder",
+            "created": root.properties.get("TimeCreated").isoformat() if root.properties.get("TimeCreated") else None,
+            "modified": root.properties.get("TimeLastModified").isoformat() if root.properties.get("TimeLastModified") else None,
+            "children": build_node(parent_folder or "")
         }
+        
     except Exception as e:
-        logger.error(f"Failed to build tree for '{path}': {e}")
-        return {"name": os.path.basename(path), "path": path, "type": "folder", "error": "Could not access folder", "children": []}
+        logger.error(f"Failed to build tree for '{root_path}': {e}")
+        return {"name": os.path.basename(root_path), "path": root_path, "type": "folder", "error": "Could not access folder", "children": []}
 
 def get_document_content(folder_name: str, file_name: str) -> dict:
     """Retrieve document content; supports PDF text extraction"""
