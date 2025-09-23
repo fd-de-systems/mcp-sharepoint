@@ -9,7 +9,13 @@ FILE_TYPES = {
     'text': ['.txt', '.csv', '.json', '.xml', '.html', '.md', '.js', '.css', '.py'],
     'pdf': ['.pdf']
 }
-TREE_CONFIG = {'max_depth': 15, 'max_folders_per_level': 100, 'level_delay': 0.5}
+
+# Tree configuration from environment variables with defaults
+TREE_CONFIG = {
+    'max_depth': int(os.getenv('SHP_MAX_DEPTH', '15')),
+    'max_folders_per_level': int(os.getenv('SHP_MAX_FOLDERS_PER_LEVEL', '100')),
+    'level_delay': float(os.getenv('SHP_LEVEL_DELAY', '0.5'))
+}
 
 def _get_sp_path(sub_path: Optional[str] = None) -> str:
     """Create a properly formatted SharePoint path"""

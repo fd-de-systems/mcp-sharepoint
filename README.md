@@ -45,11 +45,17 @@ The server is built with resource efficiency in mind:
 
 The server requires these environment variables:
 
+### Required Variables
 - `SHP_ID_APP`: Your Azure AD application client ID
 - `SHP_ID_APP_SECRET`: Your Azure AD application client secret
 - `SHP_SITE_URL`: The URL of your SharePoint site
 - `SHP_DOC_LIBRARY`: Path to the document library (default: "Shared Documents/mcp_server")
 - `SHP_TENANT_ID`: Your Microsoft tenant ID
+
+### Optional Configuration Variables
+- `SHP_MAX_DEPTH`: Maximum folder depth for tree operations (default: 15)
+- `SHP_MAX_FOLDERS_PER_LEVEL`: Maximum folders to process per level (default: 100)
+- `SHP_LEVEL_DELAY`: Delay in seconds between processing levels (default: 0.5)
 
 ## Quickstart
 
@@ -89,7 +95,10 @@ On macOS: `~/Library/Application\ Support/Claude/claude_desktop_config.json`
       "SHP_ID_APP_SECRET": "your-app-secret",
       "SHP_SITE_URL": "https://your-tenant.sharepoint.com/sites/your-site",
       "SHP_DOC_LIBRARY": "Shared Documents/your-folder",
-      "SHP_TENANT_ID": "your-tenant-id"
+      "SHP_TENANT_ID": "your-tenant-id",
+      "SHP_MAX_DEPTH": "15",
+      "SHP_MAX_FOLDERS_PER_LEVEL": "100",
+      "SHP_LEVEL_DELAY": "0.5"
     }
   }
 }
