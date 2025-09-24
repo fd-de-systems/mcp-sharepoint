@@ -1,5 +1,7 @@
-import base64, os, fitz, io, logging, time
+import base64, os, fitz, io, logging, time, pandas as pd
 from typing import Dict, Any, List, Optional
+from docx import Document
+from openpyxl import load_workbook
 from .common import logger, SHP_DOC_LIBRARY, sp_context
 
 logger = logging.getLogger(__name__)
@@ -7,7 +9,9 @@ logger = logging.getLogger(__name__)
 # Configuration
 FILE_TYPES = {
     'text': ['.txt', '.csv', '.json', '.xml', '.html', '.md', '.js', '.css', '.py'],
-    'pdf': ['.pdf']
+    'pdf': ['.pdf'],
+    'excel': ['.xlsx', '.xls'],
+    'word': ['.docx', '.doc']
 }
 
 # Tree configuration from environment variables with defaults
@@ -17,9 +21,51 @@ TREE_CONFIG = {
     'level_delay': float(os.getenv('SHP_LEVEL_DELAY', '0.5'))
 }
 
+# Download configuration
+DOWNLOAD_CONFIG = {
+    'fallback_dir': './downloads'
+}
+
 def _get_sp_path(sub_path: Optional[str] = None) -> str:
     """Create a properly formatted SharePoint path"""
     return f"{SHP_DOC_LIBRARY}/{sub_path or ''}".rstrip('/')
+
+def _ensure_directory_exists(directory: str) -> bool:
+    """Ensure target directory exists, create if necessary"""
+    try:
+        os.makedirs(directory, exist_ok=True)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to create directory {directory}: {e}")
+        return False
+
+def _get_fallback_path(file_name: str) -> str:
+    """Generate fallback path for downloads"""
+    fallback_dir = DOWNLOAD_CONFIG['fallback_dir']
+    _ensure_directory_exists(fallback_dir)
+    return os.path.join(fallback_dir, file_name)
+
+def _save_content_to_file(content_bytes: bytes, file_path: str) -> Dict[str, Any]:
+    """Save binary content to local file with error handling"""
+    try:
+        # Ensure directory exists
+        directory = os.path.dirname(file_path)
+        if directory and not _ensure_directory_exists(directory):
+            raise Exception(f"Cannot create directory: {directory}")
+            
+        # Write file
+        with open(file_path, 'wb') as f:
+            f.write(content_bytes)
+        
+        # Verify file was created
+        if os.path.exists(file_path) and os.path.getsize(file_path) == len(content_bytes):
+            return {"success": True, "path": os.path.abspath(file_path), "size": len(content_bytes)}
+        else:
+            raise Exception("File verification failed")
+            
+    except Exception as e:
+        logger.error(f"Failed to save file to {file_path}: {e}")
+        return {"success": False, "error": str(e)}
 
 def _load_sp_items(path: str, item_type: str) -> List[Dict[str, Any]]:
     """Generic function to load folders or files from SharePoint"""
@@ -57,6 +103,32 @@ def extract_text_from_pdf(pdf_content):
         return text_content.strip(), page_count
     except Exception as e:
         logger.error(f"Error extracting text from PDF: {e}")
+        raise
+
+def extract_text_from_excel(content_bytes):
+    """Extract text from Excel files"""
+    try:
+        sheets = pd.read_excel(io.BytesIO(content_bytes), sheet_name=None)
+        text_parts = []
+        for sheet_name, df in sheets.items():
+            text_parts.append(f"=== {sheet_name} ===")
+            text_parts.extend(df.head(50).fillna('').astype(str).apply(' | '.join, axis=1).tolist())
+        return "\n".join(text_parts), len(sheets)
+    except Exception as e:
+        logger.error(f"Error extracting text from Excel: {e}")
+        raise
+
+def extract_text_from_word(content_bytes):
+    """Extract text from Word documents"""
+    try:
+        doc = Document(io.BytesIO(content_bytes))
+        text_parts = [p.text for p in doc.paragraphs if p.text.strip()]
+        for table in doc.tables:
+            for row in table.rows:
+                text_parts.append(" | ".join(cell.text.strip() for cell in row.cells))
+        return "\n".join(text_parts), len(doc.paragraphs)
+    except Exception as e:
+        logger.error(f"Error extracting text from Word: {e}")
         raise
 
 def get_folder_tree(parent_folder: Optional[str] = None) -> Dict[str, Any]:
@@ -154,6 +226,22 @@ def get_document_content(folder_name: str, file_name: str) -> dict:
             logger.warning(f"PDF processing failed: {e}")
             return {"name": file_name, "content_type": "binary", "content_base64": base64.b64encode(content_bytes).decode(), "original_type": "pdf", "size": len(content_bytes)}
     
+    if file_type == 'excel':
+        try:
+            text, sheets = extract_text_from_excel(content_bytes)
+            return {"name": file_name, "content_type": "text", "content": text, "original_type": "excel", "sheet_count": sheets, "size": len(content_bytes)}
+        except Exception as e:
+            logger.warning(f"Excel processing failed: {e}")
+            return {"name": file_name, "content_type": "binary", "content_base64": base64.b64encode(content_bytes).decode(), "original_type": "excel", "size": len(content_bytes)}
+    
+    if file_type == 'word':
+        try:
+            text, paragraphs = extract_text_from_word(content_bytes)
+            return {"name": file_name, "content_type": "text", "content": text, "original_type": "word", "paragraph_count": paragraphs, "size": len(content_bytes)}
+        except Exception as e:
+            logger.warning(f"Word processing failed: {e}")
+            return {"name": file_name, "content_type": "binary", "content_base64": base64.b64encode(content_bytes).decode(), "original_type": "word", "size": len(content_bytes)}
+    
     if file_type == 'text':
         try:
             return {"name": file_name, "content_type": "text", "content": content_bytes.decode('utf-8'), "size": len(content_bytes)}
@@ -161,3 +249,60 @@ def get_document_content(folder_name: str, file_name: str) -> dict:
             pass
     
     return {"name": file_name, "content_type": "binary", "content_base64": base64.b64encode(content_bytes).decode(), "size": len(content_bytes)}
+
+def download_document(folder_name: str, file_name: str, local_path: str) -> Dict[str, Any]:
+    """Download document from SharePoint to local filesystem with fallback support"""
+    logger.info(f"Downloading {folder_name}/{file_name} to {local_path}")
+    
+    try:
+        # Get file from SharePoint
+        file_path = _get_sp_path(f"{folder_name}/{file_name}")
+        file = sp_context.web.get_file_by_server_relative_url(file_path)
+        sp_context.load(file, ["Exists", "Length", "Name"])
+        sp_context.execute_query()
+        
+        if not file.exists:
+            return {"success": False, "error": f"File {file_name} does not exist in folder {folder_name}"}
+        
+        # Download file content
+        content = io.BytesIO()
+        file.download(content)
+        sp_context.execute_query()
+        content_bytes = content.getvalue()
+        
+        # Try to save to requested path first
+        save_result = _save_content_to_file(content_bytes, local_path)
+        
+        if save_result["success"]:
+            return {
+                "success": True,
+                "path": save_result["path"],
+                "size": save_result["size"],
+                "method": "primary"
+            }
+        
+        # Fallback: save to fallback directory
+        logger.warning(f"Primary path failed: {save_result['error']}, trying fallback")
+        fallback_path = _get_fallback_path(file_name)
+        fallback_result = _save_content_to_file(content_bytes, fallback_path)
+        
+        if fallback_result["success"]:
+            return {
+                "success": True,
+                "path": fallback_result["path"], 
+                "size": fallback_result["size"],
+                "method": "fallback",
+                "primary_error": save_result["error"]
+            }
+        
+        # Both paths failed
+        return {
+            "success": False,
+            "error": f"Both primary and fallback paths failed",
+            "primary_error": save_result["error"],
+            "fallback_error": fallback_result["error"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Download failed for {folder_name}/{file_name}: {e}")
+        return {"success": False, "error": f"Download operation failed: {str(e)}"}

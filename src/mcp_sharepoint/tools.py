@@ -2,7 +2,7 @@ import base64, os
 from functools import wraps
 from typing import Optional, Dict, Any
 from .common import logger, mcp, SHP_DOC_LIBRARY, sp_context
-from .resources import list_folders, list_documents, get_document_content, get_folder_tree
+from .resources import list_folders, list_documents, get_document_content, get_folder_tree, download_document
 
 # Helper functions to reduce code duplication
 def _get_path(folder: str = "", file: Optional[str] = None) -> str:
@@ -172,3 +172,9 @@ async def delete_folder(folder_path: str):
     folder.delete_object()
     sp_context.execute_query()
     return {"success": True, "message": f"Folder '{folder_path}' deleted successfully"}
+
+@mcp.tool(name="Download_Document", description="Download a document from SharePoint to local filesystem")
+@_handle_sp_operation
+async def download_document_tool(folder_name: str, file_name: str, local_path: str):
+    """Download a document from SharePoint to local filesystem with fallback support"""
+    return download_document(folder_name, file_name, local_path)

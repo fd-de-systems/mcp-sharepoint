@@ -1,40 +1,56 @@
 # SharePoint MCP Server
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://badge.fury.io/py/mcp-sharepoint.svg)](https://badge.fury.io/py/mcp-sharepoint)
 
-A lightweight MCP Server for seamless integration with Microsoft SharePoint, enabling MCP clients to interact with documents, folders and other SharePoint resources. Developed by [sofias tech](https://github.com/sofias/mcp-sharepoint/).
+A comprehensive MCP Server for seamless integration with Microsoft SharePoint, enabling MCP clients to interact with documents, folders and other SharePoint resources. Built with efficiency and ease of use in mind, supporting both text and binary file operations. Developed by [sofias tech](https://github.com/Sofias-ai/mcp-sharepoint/).
 
 <a href="https://glama.ai/mcp/servers/@Sofias-ai/mcp-sharepoint">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@Sofias-ai/mcp-sharepoint/badge" alt="SharePoint Server MCP server" />
 </a>
 
-## Features
+## ✨ Key Features
 
-This server provides a clean interface to SharePoint resources through the Model Context Protocol (MCP), with optimized operations for document management.
+This server provides a clean, efficient interface to SharePoint resources through the Model Context Protocol (MCP), with optimized operations for document management and content processing.
 
-### Tools
+### 🛠️ Available Tools
 
-The server implements the following tools:
+The server implements **10 comprehensive tools** for complete SharePoint management:
 
-- `List_SharePoint_Folders`: Lists all folders in a specified directory or root
-- `List_SharePoint_Documents`: Fetches all documents within a specified folder
-- `Get_Document_Content`: Retrieves the content of a document (as text or base64-encoded binary)
-- `Get_SharePoint_Tree`: Gets a recursive tree view of a SharePoint folder structure
-- `Create_Folder`: Creates a new folder in the specified directory or root
-- `Upload_Document`: Uploads a new document to a specified folder
-- `Upload_Document_From_Path`: Uploads large documents from file path
-- `Update_Document`: Updates the content of an existing document
-- `Delete_Document`: Removes a document from a specified folder
-- `Delete_Folder`: Deletes an empty folder from SharePoint
+#### 📁 **Folder Management**
+- **`List_SharePoint_Folders`**: Lists all folders in a specified directory or root
+- **`Create_Folder`**: Creates new folders in specified directories 
+- **`Delete_Folder`**: Safely deletes empty folders from SharePoint
+- **`Get_SharePoint_Tree`**: Gets a recursive tree view of SharePoint folder structure
 
-## Architecture
+#### 📄 **Document Management**  
+- **`List_SharePoint_Documents`**: Fetches all documents within a specified folder with metadata
+- **`Get_Document_Content`**: Retrieves and processes document content (supports text extraction from PDF, Word, Excel)
+- **`Upload_Document`**: Uploads new documents to specified folders (supports both text and binary content)
+- **`Upload_Document_From_Path`**: Direct file upload from local filesystem for large files
+- **`Update_Document`**: Updates content of existing documents
+- **`Delete_Document`**: Removes documents from specified folders
 
-The server is built with resource efficiency in mind:
+### 🎯 **Advanced Content Processing**
 
-- Efficient SharePoint API usage with selective property loading
-- Error handling through decorators for cleaner code
-- Clear separation between resource management and tool implementation
-- Optimized content handling for both text and binary files
+The server includes intelligent content extraction capabilities:
+
+- **📊 Excel Files**: Extracts data from all sheets, converts to readable text format (first 50 rows per sheet)
+- **📝 Word Documents**: Processes paragraphs and tables, maintaining structure
+- **📄 PDF Files**: Full text extraction using PyMuPDF for accurate content parsing
+- **📃 Text Files**: Direct processing of various text formats (JSON, XML, HTML, MD, code files)
+- **🔧 Binary Support**: Base64 encoding/decoding for seamless binary file handling
+
+## 🏗️ Architecture
+
+The server is built with resource efficiency and maintainability in mind:
+
+- **Efficient SharePoint API usage** with selective property loading to minimize bandwidth
+- **Smart error handling** through decorators for cleaner, more reliable code
+- **Clear separation of concerns** between resource management and tool implementation  
+- **Optimized content handling** for both text and binary files with automatic type detection
+- **Configurable tree operations** with depth limits and batch processing for large directories
+- **Async/await support** throughout for non-blocking operations
 
 ## Setup
 
