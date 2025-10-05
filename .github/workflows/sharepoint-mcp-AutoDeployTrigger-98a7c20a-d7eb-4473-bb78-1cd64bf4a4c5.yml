@@ -51,8 +51,9 @@ jobs:
           environmentVariables: |
             PORT=8000
             SHP_SITE_URL=${{ secrets.SHP_SITE_URL }}
-            SHP_TENANT_ID=${{ secrets.SHP_TENANT_ID }}
+            SHP_TENANT_ID=${{ secrets.SHAREPOINTMCP_AZURE_TENANT_ID }}
             SHP_ID_APP=${{ secrets.SHP_ID_APP }}
             SHP_ID_APP_SECRET=${{ secrets.SHP_ID_APP_SECRET }}
+
 
 
